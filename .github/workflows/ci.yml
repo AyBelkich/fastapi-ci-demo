@@ -55,19 +55,11 @@ jobs:
 
     steps:
       - name: Set up SSH key
-        env:
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
           mkdir -p ~/.ssh
-
-          # Write the secret into the key file (safe + removes Windows CRLF)
-          printf "%s" "$EC2_SSH_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
-
+          echo "${{ secrets.EC2_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-
-          # Quick check: verify the key is readable (won't print your secret)
           ssh-keygen -l -f ~/.ssh/id_ed25519
-
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
       - name: Deploy on EC2 (pull + restart)

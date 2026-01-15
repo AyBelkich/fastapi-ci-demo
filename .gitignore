@@ -14,3 +14,4 @@ __pycache__/
 # Git and GitHub
 gha_deploy_key
 gha_deploy_key.pub
+gha_deploy_key.b64
