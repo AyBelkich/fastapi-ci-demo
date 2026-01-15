@@ -10,3 +10,7 @@ __pycache__/
 
 # Test cache
 .pytest_cache/
+
+# Git and GitHub
+gha_deploy_key
+gha_deploy_key.pub
