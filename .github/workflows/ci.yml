@@ -6,7 +6,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: amazonlinux-latest
     steps:
       - name: Checkout code (download repo)
         uses: actions/checkout@v4
@@ -30,7 +30,7 @@ jobs:
     # ONLY run this on push to main (NOT on pull requests)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: amazonlinux-latest
     steps:
       - name: Checkout code (download repo)
         uses: actions/checkout@v4
@@ -51,7 +51,7 @@ jobs:
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: docker
-    runs-on: ubuntu-latest
+    runs-on: amazonlinux-latest
 
     steps:
       - name: Set up SSH key
