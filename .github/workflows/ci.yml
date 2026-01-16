@@ -52,49 +52,63 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: docker
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Set up SSH key
         run: |
-          set -e
+          set -euo pipefail
           mkdir -p ~/.ssh
           printf '%s' "${{ secrets.EC2_SSH_KEY_B64 }}" | base64 --decode > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
+          touch ~/.ssh/known_hosts
 
           echo "GitHub runner key fingerprint:"
           ssh-keygen -lf ~/.ssh/id_ed25519
 
-          # Don't fail the job if keyscan can't reach the host
-          ssh-keyscan -T 5 -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+      - name: Check SSH port reachable
+        run: |
+          set -e
+          timeout 5 bash -c "</dev/tcp/${{ secrets.EC2_HOST }}/22" \
+            && echo "Port 22 reachable" \
+            || (echo "Port 22 blocked (fix Security Group inbound SSH)" && exit 1)
 
       - name: Deploy on EC2 (pull + restart)
         env:
           IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/fastapi-ci-demo:sha-${{ github.sha }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
         run: |
-          ssh -o IdentitiesOnly=yes \
-              -o PreferredAuthentications=publickey \
-              -o PasswordAuthentication=no \
-              -i ~/.ssh/id_ed25519 \
-              ec2-user@${{ secrets.EC2_HOST }} << EOF
-            set -e
-            IMAGE="$IMAGE"
+          set -euo pipefail
+          USERNAME="${EC2_USER:-ec2-user}"
 
-            docker pull "\$IMAGE"
-            docker rm -f items-api 2>/dev/null || true
+          ssh \
+            -o BatchMode=yes \
+            -o ConnectTimeout=10 \
+            -o StrictHostKeyChecking=accept-new \
+            -o IdentitiesOnly=yes \
+            -i ~/.ssh/id_ed25519 \
+            "${USERNAME}@${EC2_HOST}" \
+            "set -euo pipefail
+            echo 'Connected to:' \$(hostname)
 
-            docker run -d \
+            sudo docker pull '${IMAGE}'
+            sudo docker rm -f items-api 2>/dev/null || true
+
+            sudo docker run -d \
               --name items-api \
               --restart unless-stopped \
               -p 8000:8000 \
-              "\$IMAGE"
+              '${IMAGE}'
 
-            docker ps --filter "name=items-api"
-          EOF
+            sudo docker ps --filter 'name=items-api'
+            "
 
       - name: Health check (retry)
         run: |
+          set -e
           for i in {1..20}; do
-            if curl -fsS http://${{ secrets.EC2_HOST }}:8000/health; then
+            if curl -fsS "http://${{ secrets.EC2_HOST }}:8000/health"; then
               echo "Health check OK"
               exit 0
             fi

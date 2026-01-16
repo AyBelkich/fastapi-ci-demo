@@ -12,6 +12,5 @@ __pycache__/
 .pytest_cache/
 
 # Git and GitHub
-gha_deploy_key
-gha_deploy_key.pub
-gha_deploy_key.b64
+gh-actions-deploy
+gh-actions-deploy.pub
