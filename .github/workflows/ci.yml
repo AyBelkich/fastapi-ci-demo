@@ -56,12 +56,16 @@ jobs:
     steps:
       - name: Set up SSH key
         run: |
+          set -e
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/id_ed25519
+          printf '%s' "${{ secrets.EC2_SSH_KEY_B64 }}" | base64 --decode > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
+
           echo "GitHub runner key fingerprint:"
           ssh-keygen -lf ~/.ssh/id_ed25519
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+          # Don't fail the job if keyscan can't reach the host
+          ssh-keyscan -T 5 -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Deploy on EC2 (pull + restart)
         env:
