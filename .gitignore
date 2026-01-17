@@ -20,4 +20,11 @@ gh-actions-deploy.pub
 **/terraform.tfstate
 **/terraform.tfstate.*
 **/terraform.tfstate.backup
-**/terraform.tfvars
+
+# Terraform variable files
+*.tfvars
+*.tfvars.json
+
+# Terraform crash logs
+crash.log
+crash.*.log

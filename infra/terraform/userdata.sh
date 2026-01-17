@@ -26,4 +26,13 @@ chown -R ubuntu:ubuntu /home/ubuntu/.ssh
 # Run your API container
 docker pull "${docker_image}"
 docker rm -f items-api 2>/dev/null || true
-docker run -d --name items-api --restart unless-stopped -p 8000:8000 "${docker_image}"
+docker run -d \
+  --name items-api \
+  --restart unless-stopped \
+  -p 8000:8000 \
+  --log-driver awslogs \
+  --log-opt awslogs-region=eu-west-3 \
+  --log-opt awslogs-group=/items-api \
+  --log-opt awslogs-stream="$(hostname)-items-api" \
+  "${docker_image}"
+

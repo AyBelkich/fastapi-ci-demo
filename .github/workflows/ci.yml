@@ -99,6 +99,10 @@ jobs:
               --name items-api \
               --restart unless-stopped \
               -p 8000:8000 \
+              --log-driver awslogs \
+              --log-opt awslogs-region=eu-west-3 \
+              --log-opt awslogs-group=/items-api \
+              --log-opt awslogs-stream="$(hostname)-items-api" \
               '${IMAGE}'
 
             sudo docker ps --filter 'name=items-api'

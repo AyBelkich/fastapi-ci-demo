@@ -59,6 +59,7 @@ resource "aws_instance" "api" {
   subnet_id              = data.aws_subnets.default.ids[0]
   vpc_security_group_ids = [aws_security_group.api.id]
   key_name               = aws_key_pair.admin.key_name
+  iam_instance_profile   = aws_iam_instance_profile.ec2.name
 
   user_data = templatefile("${path.module}/userdata.sh", {
     docker_image       = var.docker_image
