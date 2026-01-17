@@ -32,3 +32,8 @@ variable "key_name" {
   type    = string
   default = "items-api-admin"
 }
+
+variable "alarm_email" {
+  type    = string
+  default = ""
+}
