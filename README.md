@@ -1,6 +1,6 @@
-# FastAPI Items API — CI/CD to Docker Hub + AWS EC2 (Auto-Deploy)
+# FastAPI Items API — CI/CD to Docker Hub + AWS EC2 (Terraform + CloudWatch)
 
-This is a small but realistic project I built (with the help of AI as a coach) to practice the core DevOps/Cloud workflow companies expect from a junior/intern: testing, containerization, CI, artifact publishing, and automatic deployment to a cloud VM.
+This is a small but realistic project I built (with the help of AI as a coach) to practice the core DevOps/Cloud workflow companies expect from a junior/intern: testing, containerization, CI, artifact publishing, reproducible infrastructure, basic monitoring, and centralized logging.
 
 ---
 
@@ -13,8 +13,11 @@ I built a simple FastAPI REST API for managing “items”, then made it product
 * **GitHub Actions CI** (tests on every push/PR)
 * **Docker image build + push to Docker Hub** (on `main`)
 * **Auto-deploy to AWS EC2 via SSH** (on `main`), including a health check
+* **Terraform IaC** to provision EC2 + Security Group + keys (no manual AWS Console clicks)
+* **CloudWatch CPU alarm** (basic monitoring/observability)
+* **CloudWatch Logs shipping** for container logs (no SSH needed to debug)
 
-Goal: a clean “push to main → new version is deployed” loop.
+Goal: a clean **push to main → new version is deployed** loop, with reproducible infra and minimal observability in place.
 
 ---
 
@@ -27,6 +30,9 @@ Goal: a clean “push to main → new version is deployed” loop.
 * GitHub Actions
 * Docker Hub
 * AWS EC2 (Ubuntu)
+* Terraform (AWS provider)
+* CloudWatch (Alarms + Logs)
+* SNS (optional email notifications)
 
 ---
 
@@ -66,6 +72,14 @@ Goal: a clean “push to main → new version is deployed” loop.
 * `tests/test_api.py` — API tests (FastAPI `TestClient`)
 * `Dockerfile` — container build instructions
 * `.github/workflows/ci.yml` — GitHub Actions pipeline
+* `infra/terraform/` — Infrastructure as Code (Terraform)
+
+  * `main.tf` — EC2 + security group + key pair
+  * `userdata.sh` — installs Docker + runs the container on boot
+  * `monitoring.tf` — CloudWatch CPU alarm (+ optional SNS email)
+  * `logging.tf` — CloudWatch log group
+  * `iam.tf` — IAM role + instance profile for CloudWatch Logs
+  * `variables.tf`, `providers.tf`, `outputs.tf`, `terraform.tfvars`
 
 ---
 
@@ -134,12 +148,13 @@ docker run --rm -p 8000:8000 <dockerhub_user>/<repo_name>:latest
 * On every **push** and **pull request**:
 
   * run tests (CI)
+
 * On **push to `main`**:
 
   * run tests
   * build Docker image
   * push image to Docker Hub
-  * deploy to my EC2 instance (SSH)
+  * deploy to EC2 via SSH
   * run a `/health` check after deployment
 
 ### Image tagging
@@ -158,6 +173,7 @@ On `main` pushes, GitHub Actions SSHes into my EC2 instance and runs roughly:
 ```bash
 docker pull "<image_tag>"
 docker rm -f items-api 2>/dev/null || true
+
 docker run -d \
   --name items-api \
   --restart unless-stopped \
@@ -165,14 +181,106 @@ docker run -d \
   "<image_tag>"
 ```
 
-This gives me a stable container name, automatic restarts after reboots, and a predictable exposed port.
+### Deploy verification
 
-### AWS networking
+On the EC2 instance, I can verify the running image is the commit-tagged version:
+
+```bash
+sudo docker inspect items-api --format '{{.Config.Image}}'
+# example: <dockerhub_user>/fastapi-ci-demo:sha-<commit_sha>
+```
+
+---
+
+## Infrastructure as Code (Terraform)
+
+Instead of manually creating EC2 resources in the AWS console, the server is provisioned with Terraform.
+
+### What Terraform creates
+
+* EC2 instance (Ubuntu 22.04)
+* Security Group (SSH + API)
+* SSH key pair
+* `user_data` bootstrap script:
+
+  * installs Docker
+  * adds the GitHub Actions deploy key to `authorized_keys`
+  * runs the container
+
+### Run Terraform
+
+From repo root:
+
+```bash
+cd infra/terraform
+terraform fmt -recursive
+terraform init
+terraform plan
+terraform apply
+```
+
+Terraform outputs (useful for CI/CD secrets):
+
+* `public_ip`
+* `public_dns`
+* `instance_id`
+
+---
+
+## Monitoring: CloudWatch CPU alarm
+
+I added a CloudWatch alarm for basic observability.
+
+* Metric: `AWS/EC2 -> CPUUtilization`
+* Alarm triggers when CPU > 50% for ~2 minutes
+
+Optional: the alarm can send email notifications through SNS (requires confirmation email).
+
+To test the alarm:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y stress-ng
+stress-ng --cpu 2 --timeout 240s
+```
+
+---
+
+## Centralized logging: CloudWatch Logs (no SSH needed)
+
+Instead of requiring SSH + `docker logs`, container logs are shipped automatically to CloudWatch.
+
+Approach (simple, beginner-friendly on EC2):
+
+* Docker uses the `awslogs` logging driver
+* EC2 gets an IAM role/instance profile allowing it to write logs
+* Logs are stored in CloudWatch Log Group: `/items-api`
+
+### How the container is started (with CloudWatch logging)
+
+The `docker run` uses:
+
+```bash
+--log-driver awslogs
+--log-opt awslogs-region=eu-west-3
+--log-opt awslogs-group=/items-api
+--log-opt awslogs-stream="$(hostname)-items-api"
+```
+
+### Verify in AWS
+
+CloudWatch → Logs → Log groups → `/items-api` → open the latest stream.
+
+---
+
+## AWS networking
 
 My EC2 Security Group allows:
 
 * inbound **TCP 8000** for the API
-* inbound **TCP 22** for SSH (ideally restricted to my IPs)
+* inbound **TCP 22** for SSH
+
+For a real setup, SSH should be restricted to a known IP range and/or replaced with a more secure approach (SSM, bastion, etc.). For learning + GitHub Actions SSH deploy, SSH may be temporarily open (`0.0.0.0/0`).
 
 ---
 
@@ -188,8 +296,8 @@ Docker Hub:
 EC2 deploy:
 
 * `EC2_HOST` (public IP/DNS)
-* `EC2_USER` (usually `ubuntu`)
-* `EC2_SSH_KEY` (a dedicated deploy private key)
+* `EC2_USER` (`ubuntu`)
+* `EC2_SSH_KEY_B64` (base64-encoded private key for the deploy user)
 
 I used a dedicated deploy key rather than my personal SSH key, which is closer to how teams handle automated deployments.
 
@@ -209,15 +317,18 @@ docker run -d --name items-api --restart unless-stopped -p 8000:8000 <dockerhub_
 
 ## Azure equivalent (concept mapping)
 
-I practiced on AWS, but the same design maps to Azure:
+I practiced on AWS, but the same mental model maps to Azure:
 
 * AWS EC2 + Security Group → **Azure VM + NSG**
 * Docker Hub → **Azure Container Registry (ACR)**
 * GitHub Actions deploy via SSH → same approach works for Azure VM
-* Observability later:
 
-  * AWS: CloudWatch
-  * Azure: Azure Monitor + Application Insights
+Observability equivalents:
+
+* AWS CloudWatch metrics/alarms → **Azure Monitor Metrics + Alert Rules**
+* AWS CloudWatch Logs → **Log Analytics workspace**
+* EC2 IAM role → **Managed Identity / RBAC**
+* VM log shipping typically uses **Azure Monitor Agent + Data Collection Rules**
 
 ---
 
@@ -230,6 +341,9 @@ This project proves I can:
 * set up CI in GitHub Actions
 * publish Docker images securely using secrets
 * auto-deploy to a cloud VM and validate health
+* provision infrastructure reproducibly with Terraform
+* add basic monitoring (CloudWatch alarm)
+* ship logs centrally to CloudWatch (no SSH required)
 * understand traceable versions and basic rollback
 
-Next steps I plan to add: Terraform (IaC) for provisioning the EC2 + security group, and basic monitoring/logging (CloudWatch / Azure Monitor).
+Next step: Terraform **remote state** (S3 + DynamoDB lock).
