@@ -232,4 +232,4 @@ This project proves I can:
 * auto-deploy to a cloud VM and validate health
 * understand traceable versions and basic rollback
 
-Next steps I plan to add: Terraform (IaC) for provisioning the EC2 + security group, and basic monitoring/logging (CloudWatch / Azure Monitor).
+Next steps I plan to add is: Terraform (IaC) for provisioning the EC2 + security group, and basic monitoring/logging (CloudWatch / Azure Monitor).

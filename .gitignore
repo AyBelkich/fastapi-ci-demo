@@ -14,3 +14,10 @@ __pycache__/
 # Git and GitHub
 gh-actions-deploy
 gh-actions-deploy.pub
+
+# Terraform
+**/.terraform/*
+**/terraform.tfstate
+**/terraform.tfstate.*
+**/terraform.tfstate.backup
+**/terraform.tfvars
