@@ -35,4 +35,3 @@ docker run -d \
   --log-opt awslogs-group=/items-api \
   --log-opt awslogs-stream="$(hostname)-items-api" \
   "${docker_image}"
-
